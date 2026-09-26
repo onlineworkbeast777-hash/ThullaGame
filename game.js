@@ -20,6 +20,34 @@ const PLAYER_COUNT = 4;
 
 
 // ========================================
+// REAL MULTIPLAYER SERVER
+// ========================================
+
+const MULTIPLAYER_SERVER =
+    "wss://thullagame.onrender.com";
+
+let multiplayerMode = false;
+
+let mpSocket = null;
+
+let mpPlayerId = null;
+let mpRoomCode = null;
+let mpIsHost = false;
+
+let mpPlayers = [];
+let mpHand = [];
+
+let mpCurrentPlayerId = null;
+let mpLeadSuit = null;
+let mpRoundCards = [];
+let mpRoundResolving = false;
+let mpGameStarted = false;
+let mpPaused = false;
+
+let mpConnecting = false;
+
+
+// ========================================
 // PLAYER PROFILE
 // ========================================
 
@@ -107,18 +135,18 @@ function showScreen(screen) {
     });
 
 
-    if (screen) {
+    if (gameScreen) {
 
-        screen.classList.add(
+        gameScreen.classList.remove(
             "active"
         );
 
     }
 
 
-    if (gameScreen) {
+    if (screen) {
 
-        gameScreen.classList.remove(
+        screen.classList.add(
             "active"
         );
 
@@ -136,7 +164,7 @@ function showScreen(screen) {
 
 
 // ========================================
-// GAME STATE
+// OFFLINE GAME STATE
 // ========================================
 
 let players = [];
@@ -293,7 +321,7 @@ const startMultiplayerBtn =
 
 
 // ========================================
-// HELPERS
+// GENERAL HELPERS
 // ========================================
 
 function randomBetween(min, max) {
@@ -318,7 +346,17 @@ function suitColor(suit) {
     }
 
     return "black";
+}
 
+
+function escapeHTML(text) {
+
+    return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 
@@ -384,7 +422,7 @@ function shuffle(array) {
 
 
 // ========================================
-// PLAYERS
+// OFFLINE PLAYERS
 // ========================================
 
 function createPlayers() {
@@ -430,7 +468,7 @@ function createPlayers() {
 
 
 // ========================================
-// DEAL
+// OFFLINE DEAL
 // ========================================
 
 function dealCards() {
@@ -539,10 +577,14 @@ function findAceOfSpades() {
 
 
 // ========================================
-// START OFFLINE GAME
+// OFFLINE START
 // ========================================
 
 function startOfflineGame() {
+
+    disconnectMultiplayer();
+
+    multiplayerMode = false;
 
     showScreen(
         gameScreen
@@ -553,10 +595,12 @@ function startOfflineGame() {
 
 
 // ========================================
-// START GAME
+// OFFLINE GAME
 // ========================================
 
 function startGame() {
+
+    multiplayerMode = false;
 
     gameStarted = false;
 
@@ -676,7 +720,7 @@ function setStatus(text) {
 
 
 // ========================================
-// VALIDATION
+// OFFLINE VALIDATION
 // ========================================
 
 function canPlayCard(
@@ -732,7 +776,7 @@ function canPlayCard(
 
 
 // ========================================
-// THULLA CHECK
+// OFFLINE THULLA CHECK
 // ========================================
 
 function willCauseThulla(
@@ -778,13 +822,17 @@ function willCauseThulla(
 
 
 // ========================================
-// PLAY CARD
+// OFFLINE PLAY CARD
 // ========================================
 
 function playCard(
     playerIndex,
     cardIndex
 ) {
+
+    if (multiplayerMode) {
+        return;
+    }
 
     if (!gameStarted) {
         return;
@@ -942,7 +990,7 @@ function playCard(
 
 
 // ========================================
-// THULLA
+// OFFLINE THULLA
 // ========================================
 
 function handleImmediateThulla(
@@ -1123,8 +1171,8 @@ function showThullaPopupOnly(
     if (thullaWinner) {
 
         thullaWinner.innerHTML =
-            `${thullaPlayerName} gave THULLA<br>
-             <strong>${winnerName}</strong> gets all cards`;
+            `${escapeHTML(thullaPlayerName)} gave THULLA<br>
+             <strong>${escapeHTML(winnerName)}</strong> gets all cards`;
 
     }
 
@@ -1136,7 +1184,7 @@ function showThullaPopupOnly(
 
 
 // ========================================
-// NORMAL ROUND
+// OFFLINE NORMAL ROUND
 // ========================================
 
 function resolveNormalRound() {
@@ -1245,7 +1293,7 @@ function resolveNormalRound() {
 
 
 // ========================================
-// NEXT PLAYER
+// OFFLINE NEXT PLAYER
 // ========================================
 
 function moveToNextPlayer() {
@@ -1523,6 +1571,10 @@ function chooseSmartCard(
 
 function computerTurn() {
 
+    if (multiplayerMode) {
+        return;
+    }
+
     if (!gameStarted) {
         return;
     }
@@ -1597,7 +1649,7 @@ function computerTurn() {
 
 
 // ========================================
-// PLAYER FINISHED
+// OFFLINE FINISH
 // ========================================
 
 function checkPlayerFinished(
@@ -1624,7 +1676,7 @@ function checkPlayerFinished(
 
 
 // ========================================
-// GAME OVER
+// OFFLINE GAME OVER
 // ========================================
 
 function checkGameOver() {
@@ -1678,7 +1730,7 @@ function checkGameOver() {
 
 
 // ========================================
-// HIDE THULLA
+// POPUPS
 // ========================================
 
 function hideThullaPopup() {
@@ -1692,10 +1744,6 @@ function hideThullaPopup() {
     }
 }
 
-
-// ========================================
-// RESULT
-// ========================================
 
 function showResult(
     loserIndex
@@ -1726,7 +1774,7 @@ function showResult(
             text +=
                 `<strong>
                     ${position + 1}.
-                    ${players[playerIndex].name}
+                    ${escapeHTML(players[playerIndex].name)}
                  </strong><br>`;
 
         }
@@ -1740,7 +1788,7 @@ function showResult(
         text +=
             `<br>
              💀 Last:
-             ${players[loserIndex].name}`;
+             ${escapeHTML(players[loserIndex].name)}`;
 
     }
 
@@ -1759,10 +1807,6 @@ function showResult(
 }
 
 
-// ========================================
-// HIDE RESULT
-// ========================================
-
 function hideResult() {
 
     if (resultPopup) {
@@ -1776,7 +1820,7 @@ function hideResult() {
 
 
 // ========================================
-// RENDER HAND
+// OFFLINE HAND RENDER
 // ========================================
 
 function renderMyHand() {
@@ -1861,7 +1905,7 @@ function renderMyHand() {
 
 
 // ========================================
-// RENDER TABLE
+// OFFLINE TABLE RENDER
 // ========================================
 
 function renderTable() {
@@ -1948,7 +1992,7 @@ function renderTable() {
 
 
 // ========================================
-// PLAYER BOX
+// OFFLINE PLAYER BOX
 // ========================================
 
 function updatePlayerBox(
@@ -1981,7 +2025,7 @@ function updatePlayerBox(
         <div>
 
             <strong>
-                ${player.name}
+                ${escapeHTML(player.name)}
             </strong>
 
             <span>
@@ -2021,76 +2065,1298 @@ function updatePlayerBox(
 
 
 // ========================================
-// UPDATE UI
+// REAL MULTIPLAYER CONNECTION
 // ========================================
 
-function updateUI() {
+function connectMultiplayer(
+    afterConnect
+) {
 
-    if (!players.length) {
+    if (
+        mpSocket &&
+        mpSocket.readyState === WebSocket.OPEN
+    ) {
+
+        afterConnect();
+        return;
+
+    }
+
+
+    if (mpConnecting) {
         return;
     }
 
 
-    updatePlayerBox(
-        "you",
-        0
-    );
+    mpConnecting = true;
 
-    updatePlayerBox(
-        "p2",
-        1
-    );
 
-    updatePlayerBox(
-        "p3",
-        2
-    );
-
-    updatePlayerBox(
-        "p4",
-        3
+    setStatus(
+        "Connecting to server..."
     );
 
 
-    renderMyHand();
+    try {
 
-    renderTable();
+        mpSocket =
+            new WebSocket(
+                MULTIPLAYER_SERVER
+            );
+
+    } catch (error) {
+
+        mpConnecting = false;
+
+        alert(
+            "Could not connect to multiplayer server."
+        );
+
+        return;
+    }
+
+
+    mpSocket.addEventListener(
+        "open",
+        () => {
+
+            mpConnecting = false;
+
+            console.log(
+                "Connected to Thulla server."
+            );
+
+            afterConnect();
+
+        }
+    );
+
+
+    mpSocket.addEventListener(
+        "message",
+        event => {
+
+            let data;
+
+            try {
+
+                data =
+                    JSON.parse(
+                        event.data
+                    );
+
+            } catch (error) {
+
+                console.log(
+                    "Invalid server message."
+                );
+
+                return;
+            }
+
+
+            handleMultiplayerMessage(
+                data
+            );
+
+        }
+    );
+
+
+    mpSocket.addEventListener(
+        "error",
+        error => {
+
+            mpConnecting = false;
+
+            console.log(
+                "Multiplayer connection error",
+                error
+            );
+
+        }
+    );
+
+
+    mpSocket.addEventListener(
+        "close",
+        () => {
+
+            mpConnecting = false;
+
+            console.log(
+                "Disconnected from server."
+            );
+
+            if (
+                multiplayerMode &&
+                mpGameStarted
+            ) {
+
+                setStatus(
+                    "Connection lost."
+                );
+
+            }
+
+        }
+    );
 }
 
 
 // ========================================
-// ROOM UI
+// SEND TO SERVER
 // ========================================
 
-let fakeRoomCode = null;
+function sendMultiplayer(
+    data
+) {
 
-
-function generateRoomCode() {
-
-    const chars =
-        "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-    let code = "";
-
-
-    for (
-        let i = 0;
-        i < 4;
-        i++
+    if (
+        !mpSocket ||
+        mpSocket.readyState !==
+        WebSocket.OPEN
     ) {
 
-        code +=
-            chars[
-                Math.floor(
-                    Math.random() *
-                    chars.length
-                )
-            ];
+        alert(
+            "Not connected to server."
+        );
+
+        return false;
+    }
+
+
+    mpSocket.send(
+        JSON.stringify(data)
+    );
+
+    return true;
+}
+
+
+// ========================================
+// SERVER MESSAGES
+// ========================================
+
+function handleMultiplayerMessage(
+    data
+) {
+
+    switch (data.type) {
+
+        case "connected":
+
+            console.log(
+                "Server connection established."
+            );
+
+            break;
+
+
+        case "room_created":
+
+            mpPlayerId =
+                data.playerId;
+
+            mpRoomCode =
+                data.roomCode;
+
+            mpIsHost = true;
+
+            multiplayerMode = true;
+
+            showScreen(
+                lobbyScreen
+            );
+
+            showLobbyRoom();
+
+            break;
+
+
+        case "room_joined":
+
+            mpPlayerId =
+                data.playerId;
+
+            mpRoomCode =
+                data.roomCode;
+
+            mpIsHost = false;
+
+            multiplayerMode = true;
+
+            showScreen(
+                lobbyScreen
+            );
+
+            showLobbyRoom();
+
+            break;
+
+
+        case "lobby_state":
+
+            multiplayerMode = true;
+
+            mpRoomCode =
+                data.roomCode;
+
+            mpPlayers =
+                Array.isArray(data.players)
+                    ? data.players
+                    : [];
+
+            mpIsHost =
+                data.hostId ===
+                mpPlayerId;
+
+            renderRealLobby();
+
+            break;
+
+
+        case "game_state":
+
+            handleMultiplayerGameState(
+                data
+            );
+
+            break;
+
+
+        case "round_winner":
+
+            if (
+                data.winnerName
+            ) {
+
+                setStatus(
+                    `${data.winnerName} won the round`
+                );
+
+            }
+
+            break;
+
+
+        case "thulla":
+
+            handleMultiplayerThulla(
+                data
+            );
+
+            break;
+
+
+        case "thulla_collected":
+
+            hideThullaPopup();
+
+            if (
+                data.winnerName
+            ) {
+
+                setStatus(
+                    `${data.winnerName}'s turn`
+                );
+
+            }
+
+            break;
+
+
+        case "player_disconnected":
+
+            mpPaused = true;
+
+            setStatus(
+                data.message ||
+                "A player disconnected. Game paused."
+            );
+
+            break;
+
+
+        case "game_over":
+
+            handleMultiplayerGameOver(
+                data
+            );
+
+            break;
+
+
+        case "error":
+
+            console.log(
+                "Server:",
+                data.message
+            );
+
+            alert(
+                data.message ||
+                "Server error."
+            );
+
+            break;
+
+
+        default:
+
+            console.log(
+                "Unknown server message:",
+                data
+            );
+    }
+}
+
+
+// ========================================
+// LOBBY
+// ========================================
+
+function showLobbyRoom() {
+
+    if (roomArea) {
+
+        roomArea.style.display =
+            "block";
 
     }
 
 
-    return code;
+    if (roomCodeEl) {
+
+        roomCodeEl.textContent =
+            mpRoomCode ||
+            "----";
+
+    }
+}
+
+
+function renderRealLobby() {
+
+    showLobbyRoom();
+
+
+    if (!lobbyPlayersEl) {
+        return;
+    }
+
+
+    lobbyPlayersEl.innerHTML = "";
+
+
+    for (
+        let i = 0;
+        i < PLAYER_COUNT;
+        i++
+    ) {
+
+        const player =
+            mpPlayers[i];
+
+
+        const row =
+            document.createElement(
+                "div"
+            );
+
+
+        row.className =
+            "lobby-player";
+
+
+        if (
+            player &&
+            player.host
+        ) {
+
+            row.classList.add(
+                "host"
+            );
+
+        }
+
+
+        if (player) {
+
+            row.innerHTML = `
+
+                <div class="lobby-player-name">
+                    ${escapeHTML(player.name)}
+                    ${
+                        player.host
+                            ? " 👑"
+                            : ""
+                    }
+                </div>
+
+                <div class="lobby-player-status">
+                    ${
+                        player.connected
+                            ? "Ready"
+                            : "Offline"
+                    }
+                </div>
+
+            `;
+
+        } else {
+
+            row.innerHTML = `
+
+                <div class="lobby-player-name">
+                    Waiting for player...
+                </div>
+
+                <div class="lobby-player-status">
+                    Waiting
+                </div>
+
+            `;
+
+        }
+
+
+        lobbyPlayersEl.appendChild(
+            row
+        );
+
+    }
+
+
+    if (startMultiplayerBtn) {
+
+        startMultiplayerBtn.disabled =
+            !mpIsHost ||
+            mpPlayers.length < 2;
+
+        startMultiplayerBtn.textContent =
+            mpIsHost
+                ? (
+                    mpPlayers.length >= 2
+                        ? "START GAME"
+                        : "WAITING FOR PLAYERS"
+                )
+                : "WAITING FOR HOST";
+
+    }
+}
+
+
+// ========================================
+// CREATE ROOM
+// ========================================
+
+function createRoom() {
+
+    if (
+        !myNickname ||
+        myNickname.length < 2
+    ) {
+
+        alert(
+            "Set your nickname first."
+        );
+
+        return;
+    }
+
+
+    multiplayerMode = true;
+
+
+    connectMultiplayer(
+        () => {
+
+            sendMultiplayer({
+
+                type:
+                    "create_room",
+
+                name:
+                    myNickname
+
+            });
+
+        }
+    );
+}
+
+
+// ========================================
+// JOIN ROOM
+// ========================================
+
+function joinRoom() {
+
+    const code =
+        joinRoomInput
+            ? joinRoomInput.value
+                .trim()
+                .toUpperCase()
+            : "";
+
+
+    if (
+        code.length !== 4
+    ) {
+
+        alert(
+            "Enter a valid 4-character room code."
+        );
+
+        return;
+    }
+
+
+    if (
+        !myNickname ||
+        myNickname.length < 2
+    ) {
+
+        alert(
+            "Set your nickname first."
+        );
+
+        return;
+    }
+
+
+    multiplayerMode = true;
+
+
+    connectMultiplayer(
+        () => {
+
+            sendMultiplayer({
+
+                type:
+                    "join_room",
+
+                roomCode:
+                    code,
+
+                name:
+                    myNickname
+
+            });
+
+        }
+    );
+}
+
+
+// ========================================
+// START MULTIPLAYER
+// ========================================
+
+function startMultiplayer() {
+
+    if (!mpIsHost) {
+
+        alert(
+            "Only the host can start the game."
+        );
+
+        return;
+    }
+
+
+    if (
+        mpPlayers.length < 2
+    ) {
+
+        alert(
+            "At least 2 players are required."
+        );
+
+        return;
+    }
+
+
+    sendMultiplayer({
+
+        type:
+            "start_game"
+
+    });
+}
+
+
+// ========================================
+// MULTIPLAYER GAME STATE
+// ========================================
+
+function handleMultiplayerGameState(
+    data
+) {
+
+    multiplayerMode = true;
+
+    mpGameStarted =
+        !!data.started;
+
+    mpPaused =
+        !!data.paused;
+
+    mpPlayers =
+        Array.isArray(data.players)
+            ? data.players
+            : [];
+
+    mpHand =
+        Array.isArray(data.yourHand)
+            ? data.yourHand
+            : [];
+
+    mpCurrentPlayerId =
+        data.currentPlayerId ||
+        null;
+
+    mpLeadSuit =
+        data.leadSuit ||
+        null;
+
+    mpRoundCards =
+        Array.isArray(data.roundCards)
+            ? data.roundCards
+            : [];
+
+    mpRoundResolving =
+        !!data.roundResolving;
+
+
+    if (
+        data.yourPlayerId
+    ) {
+
+        mpPlayerId =
+            data.yourPlayerId;
+
+    }
+
+
+    if (
+        data.roomCode
+    ) {
+
+        mpRoomCode =
+            data.roomCode;
+
+    }
+
+
+    hideResult();
+
+
+    if (
+        mpGameStarted
+    ) {
+
+        showScreen(
+            gameScreen
+        );
+
+        renderMultiplayerGame();
+
+    } else {
+
+        if (
+            mpPlayers.length > 0
+        ) {
+
+            showScreen(
+                lobbyScreen
+            );
+
+            renderRealLobby();
+
+        }
+
+    }
+}
+
+
+// ========================================
+// MULTIPLAYER GAME RENDER
+// ========================================
+
+function renderMultiplayerGame() {
+
+    renderMultiplayerPlayers();
+
+    renderMultiplayerHand();
+
+    renderMultiplayerTable();
+
+    updateMultiplayerStatus();
+}
+
+
+// ========================================
+// MULTIPLAYER PLAYERS
+// ========================================
+
+function renderMultiplayerPlayers() {
+
+    const boxIds = [
+        "you",
+        "p2",
+        "p3",
+        "p4"
+    ];
+
+
+    for (
+        let i = 0;
+        i < boxIds.length;
+        i++
+    ) {
+
+        const element =
+            document.getElementById(
+                boxIds[i]
+            );
+
+
+        if (!element) {
+            continue;
+        }
+
+
+        const player =
+            mpPlayers[i];
+
+
+        element.classList.remove(
+            "active"
+        );
+
+
+        if (!player) {
+
+            element.innerHTML = `
+
+                <div>
+                    <strong>
+                        WAITING
+                    </strong>
+
+                    <span>
+                        Empty seat
+                    </span>
+                </div>
+
+            `;
+
+            continue;
+        }
+
+
+        const isCurrent =
+            player.id ===
+            mpCurrentPlayerId;
+
+
+        const isMe =
+            player.id ===
+            mpPlayerId;
+
+
+        element.innerHTML = `
+
+            <div>
+
+                <strong>
+                    ${escapeHTML(player.name)}
+                    ${
+                        isMe
+                            ? " • YOU"
+                            : ""
+                    }
+                </strong>
+
+                <span>
+                    ${player.cardCount}
+                    ${
+                        player.cardCount === 1
+                            ? "card"
+                            : "cards"
+                    }
+                </span>
+
+            </div>
+
+            <div>
+                ${
+                    isCurrent &&
+                    mpGameStarted
+                        ? `<div class="turn-dot"></div>`
+                        : ""
+                }
+            </div>
+
+        `;
+
+
+        if (
+            isCurrent &&
+            mpGameStarted
+        ) {
+
+            element.classList.add(
+                "active"
+            );
+
+        }
+
+    }
+}
+
+
+// ========================================
+// MULTIPLAYER HAND
+// ========================================
+
+function renderMultiplayerHand() {
+
+    if (!myHandEl) {
+        return;
+    }
+
+
+    myHandEl.innerHTML = "";
+
+
+    mpHand.forEach(
+        card => {
+
+            const cardEl =
+                document.createElement(
+                    "div"
+                );
+
+
+            cardEl.className =
+                `card ${suitColor(
+                    card.suit
+                )}`;
+
+
+            cardEl.innerHTML = `
+
+                <div class="rank">
+                    ${escapeHTML(card.rank)}
+                </div>
+
+                <div class="suit">
+                    ${escapeHTML(card.suit)}
+                </div>
+
+            `;
+
+
+            const myTurn =
+                mpCurrentPlayerId ===
+                mpPlayerId;
+
+
+            if (
+                myTurn &&
+                mpGameStarted &&
+                !mpRoundResolving &&
+                !mpPaused
+            ) {
+
+                cardEl.classList.add(
+                    "clickable"
+                );
+
+
+                cardEl.addEventListener(
+                    "click",
+                    () => {
+
+                        sendMultiplayer({
+
+                            type:
+                                "play_card",
+
+                            cardId:
+                                card.id
+
+                        });
+
+                    }
+                );
+
+            }
+
+
+            myHandEl.appendChild(
+                cardEl
+            );
+
+        }
+    );
+}
+
+
+// ========================================
+// MULTIPLAYER TABLE
+// ========================================
+
+function renderMultiplayerTable() {
+
+    if (!tableEl) {
+        return;
+    }
+
+
+    tableEl.innerHTML = "";
+
+
+    mpRoundCards.forEach(
+        played => {
+
+            const wrapper =
+                document.createElement(
+                    "div"
+                );
+
+
+            wrapper.className =
+                "table-card";
+
+
+            const playerLabel =
+                document.createElement(
+                    "div"
+                );
+
+
+            playerLabel.className =
+                "table-player";
+
+
+            playerLabel.textContent =
+                played.playerName;
+
+
+            const cardEl =
+                document.createElement(
+                    "div"
+                );
+
+
+            cardEl.className =
+                `card ${suitColor(
+                    played.card.suit
+                )}`;
+
+
+            cardEl.innerHTML = `
+
+                <div class="rank">
+                    ${escapeHTML(played.card.rank)}
+                </div>
+
+                <div class="suit">
+                    ${escapeHTML(played.card.suit)}
+                </div>
+
+            `;
+
+
+            wrapper.appendChild(
+                playerLabel
+            );
+
+
+            wrapper.appendChild(
+                cardEl
+            );
+
+
+            tableEl.appendChild(
+                wrapper
+            );
+
+        }
+    );
+}
+
+
+// ========================================
+// MULTIPLAYER STATUS
+// ========================================
+
+function updateMultiplayerStatus() {
+
+    if (mpPaused) {
+
+        setStatus(
+            "Game paused — player disconnected."
+        );
+
+        return;
+    }
+
+
+    if (mpRoundResolving) {
+
+        setStatus(
+            "Resolving round..."
+        );
+
+        return;
+    }
+
+
+    const current =
+        mpPlayers.find(
+            player =>
+                player.id ===
+                mpCurrentPlayerId
+        );
+
+
+    if (!current) {
+        return;
+    }
+
+
+    if (
+        current.id ===
+        mpPlayerId
+    ) {
+
+        if (mpLeadSuit) {
+
+            setStatus(
+                `YOUR TURN • Lead: ${mpLeadSuit}`
+            );
+
+        } else {
+
+            setStatus(
+                "YOUR TURN"
+            );
+
+        }
+
+    } else {
+
+        if (mpLeadSuit) {
+
+            setStatus(
+                `${current.name}'s turn • Lead: ${mpLeadSuit}`
+            );
+
+        } else {
+
+            setStatus(
+                `${current.name}'s turn`
+            );
+
+        }
+
+    }
+}
+
+
+// ========================================
+// MULTIPLAYER THULLA
+// ========================================
+
+function handleMultiplayerThulla(
+    data
+) {
+
+    setStatus(
+        `${data.giverName} gave THULLA!`
+    );
+
+
+    setTimeout(() => {
+
+        if (!mpGameStarted) {
+            return;
+        }
+
+
+        showThullaPopupOnly(
+            data.giverName,
+            data.winnerName
+        );
+
+    }, 50);
+}
+
+
+// ========================================
+// MULTIPLAYER GAME OVER
+// ========================================
+
+function handleMultiplayerGameOver(
+    data
+) {
+
+    mpGameStarted = false;
+
+    mpRoundResolving = false;
+
+    hideThullaPopup();
+
+
+    if (!resultPopup) {
+        return;
+    }
+
+
+    if (resultTitle) {
+
+        resultTitle.textContent =
+            "GAME OVER";
+
+    }
+
+
+    let text = "";
+
+
+    if (
+        Array.isArray(
+            data.ranking
+        )
+    ) {
+
+        data.ranking.forEach(
+            (
+                player,
+                index
+            ) => {
+
+                text +=
+                    `<strong>
+                        ${index + 1}.
+                        ${escapeHTML(player.name)}
+                     </strong><br>`;
+
+            }
+        );
+
+    }
+
+
+    if (resultText) {
+
+        resultText.innerHTML =
+            text ||
+            "Game finished.";
+
+    }
+
+
+    resultPopup.classList.add(
+        "show"
+    );
+}
+
+
+// ========================================
+// DISCONNECT MULTIPLAYER
+// ========================================
+
+function disconnectMultiplayer() {
+
+    if (mpSocket) {
+
+        try {
+
+            if (
+                mpSocket.readyState ===
+                WebSocket.OPEN
+            ) {
+
+                mpSocket.send(
+                    JSON.stringify({
+                        type:
+                            "leave_room"
+                    })
+                );
+
+            }
+
+        } catch (error) {
+
+            // Ignore disconnect errors.
+        }
+
+
+        try {
+
+            mpSocket.close();
+
+        } catch (error) {
+
+            // Ignore.
+        }
+
+    }
+
+
+    mpSocket = null;
+
+    mpPlayerId = null;
+    mpRoomCode = null;
+    mpIsHost = false;
+
+    mpPlayers = [];
+    mpHand = [];
+
+    mpCurrentPlayerId = null;
+    mpLeadSuit = null;
+    mpRoundCards = [];
+
+    mpRoundResolving = false;
+    mpGameStarted = false;
+    mpPaused = false;
+
+    mpConnecting = false;
+}
+
+
+// ========================================
+// MULTIPLAYER LOBBY
+// ========================================
+
+function openMultiplayer() {
+
+    multiplayerMode = true;
+
+    showScreen(
+        lobbyScreen
+    );
+
+
+    if (roomArea) {
+
+        roomArea.style.display =
+            "none";
+
+    }
+
+
+    if (joinRoomInput) {
+
+        joinRoomInput.value = "";
+
+    }
+
 }
 
 
@@ -2157,7 +3423,7 @@ function renderLobbyPreview() {
             row.innerHTML = `
 
                 <div class="lobby-player-name">
-                    ${player.name}
+                    ${escapeHTML(player.name)}
                 </div>
 
                 <div class="lobby-player-status">
@@ -2180,97 +3446,49 @@ function renderLobbyPreview() {
 }
 
 
-function openMultiplayer() {
+// ========================================
+// UPDATE UI
+// ========================================
 
-    showScreen(
-        lobbyScreen
-    );
+function updateUI() {
 
+    if (multiplayerMode) {
 
-    if (roomArea) {
-
-        roomArea.style.display =
-            "none";
-
-    }
-
-
-    if (joinRoomInput) {
-
-        joinRoomInput.value = "";
-
-    }
-
-}
-
-
-function createRoom() {
-
-    fakeRoomCode =
-        generateRoomCode();
-
-
-    if (roomCodeEl) {
-
-        roomCodeEl.textContent =
-            fakeRoomCode;
-
-    }
-
-
-    if (roomArea) {
-
-        roomArea.style.display =
-            "block";
-
-    }
-
-
-    renderLobbyPreview();
-
-}
-
-
-function joinRoom() {
-
-    const code =
-        joinRoomInput
-            ? joinRoomInput.value
-                .trim()
-                .toUpperCase()
-            : "";
-
-
-    if (
-        code.length !== 4
-    ) {
-
-        alert(
-            "Enter a valid 4-character room code."
-        );
+        renderMultiplayerGame();
 
         return;
-
     }
 
 
-    alert(
-        `Room ${code} found.\n\nOnline server connection will be added next.`
+    if (!players.length) {
+        return;
+    }
+
+
+    updatePlayerBox(
+        "you",
+        0
     );
 
-}
-
-
-// ========================================
-// MULTIPLAYER START PLACEHOLDER
-// ========================================
-
-function startMultiplayer() {
-
-    alert(
-        "Multiplayer server is the next step.\n\nYour lobby is ready for the real connection."
+    updatePlayerBox(
+        "p2",
+        1
     );
 
+    updatePlayerBox(
+        "p3",
+        2
+    );
+
+    updatePlayerBox(
+        "p4",
+        3
+    );
+
+
+    renderMyHand();
+
+    renderTable();
 }
 
 
@@ -2408,6 +3626,10 @@ if (lobbyBackBtn) {
         "click",
         () => {
 
+            disconnectMultiplayer();
+
+            multiplayerMode = false;
+
             showScreen(
                 menuScreen
             );
@@ -2423,6 +3645,15 @@ if (gameMenuBtn) {
     gameMenuBtn.addEventListener(
         "click",
         () => {
+
+            if (multiplayerMode) {
+
+                disconnectMultiplayer();
+
+                multiplayerMode = false;
+
+            }
+
 
             gameStarted = false;
 
@@ -2444,7 +3675,23 @@ if (newGameBtn) {
 
     newGameBtn.addEventListener(
         "click",
-        startGame
+        () => {
+
+            if (multiplayerMode) {
+
+                if (mpIsHost) {
+
+                    startMultiplayer();
+
+                }
+
+                return;
+            }
+
+
+            startGame();
+
+        }
     );
 
 }
